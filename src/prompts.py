@@ -1,34 +1,52 @@
+CRITERIA = {
+    "1": "Awards/prizes (significant national or international awards or prizes).",
+    "2": "Lead/starring participant in productions or events with distinguished reputation.",
+    "3": "National/international recognition via critical reviews or major published materials.",
+    "4": "Lead/starring/critical role for organizations/establishments with distinguished reputation.",
+    "5": "Record of major commercial or critically acclaimed successes.",
+    "6": "Significant recognition from experts/organizations/critics (testimonials).",
+    "7": "High salary or substantial remuneration (contracts or reliable evidence).",
+}
+
 SYSTEM_PROMPT = """You are an expert US immigration paralegal specializing in USCIS O-1 (arts) petitions.
-You extract short, high-signal phrases from press/reviews that help prove O-1 criteria.
-Return ONLY valid JSON. No markdown. No commentary.
+You extract SHORT, HIGH-SIGNAL QUOTABLE PHRASES from documents to support specific O-1 criteria.
+
+Hard rules:
+- Return ONLY valid JSON. No markdown. No commentary.
+- Quotes must be verbatim substrings of the provided text.
+- Prefer phrases 5–30 words. Avoid duplicates/near-duplicates.
+- If the beneficiary name appears in the document, prefer quotes that include the name or clearly refer to the beneficiary.
+- If a quote supports multiple criteria, you may place it under multiple criteria.
 """
 
 USER_PROMPT_TEMPLATE = """
-From the text below, extract a list of EXACT QUOTABLE PHRASES that are strong evidence for an O-1 (arts) petition.
-Focus on phrases that show:
-- critical acclaim / rave review language (e.g., "internationally acclaimed", "superb", "world-class")
-- leading / starring / featured roles
-- distinguished reputation of venues, festivals, orchestras, ensembles, conductors
-- awards, nominations, prizes, competitions
-- high salary / top-tier selection language (if present)
-- "best of", "among the finest", "exceptional", "virtuosic", etc.
+Beneficiary:
+- Primary name: {beneficiary_name}
+- Name variants (may appear in text): {beneficiary_variants}
 
-Rules:
-- Return 8–35 phrases max (only include what exists).
-- Each phrase should be an exact substring from the text (copy it verbatim).
-- Prefer phrases between 5 and 30 words.
-- Avoid duplicates and near-duplicates.
-- Include the artist's name if it appears in the phrase.
-- If the text is not in English, still extract exact phrases.
+You will extract quote candidates ONLY for the selected O-1 criteria IDs:
+{selected_criteria_block}
 
-Return JSON in this shape:
-{
-  "terms": [ "phrase1", "phrase2", ... ],
-  "rationale_tags": {
-     "phrase1": ["critical_acclaim", "distinguished_venue"],
-     "phrase2": ["award"]
-  }
-}
+Steer with feedback examples (optional):
+- APPROVED EXAMPLES (good style): {approved_examples}
+- REJECTED EXAMPLES (avoid suggesting things like these): {rejected_examples}
+
+Task:
+From the document text, extract strong quote candidates for each selected criterion.
+
+Output JSON schema:
+{{
+  "by_criterion": {{
+    "1": [{{"quote": "...", "strength": "high|medium|low"}}],
+    "2": [{{"quote": "...", "strength": "high|medium|low"}}]
+  }},
+  "notes": "Optional brief notes, or empty string"
+}}
+
+Strength guidance:
+- high: directly supports the criterion with clear, specific, impressive language
+- medium: supportive but less explicit or missing key detail
+- low: weak/ancillary (include only if few strong options)
 
 TEXT:
 \"\"\"{text}\"\"\"
