@@ -27,7 +27,6 @@ st.divider()
 if "terms_by_file" not in st.session_state:
     st.session_state["terms_by_file"] = {}
 
-# --- Generate AI terms ---
 st.subheader("1️⃣ Generate O-1 highlight phrases (AI)")
 
 if st.button("Generate phrases for all PDFs", type="primary"):
@@ -40,13 +39,14 @@ if st.button("Generate phrases for all PDFs", type="primary"):
 
 st.divider()
 
-# --- Per-PDF review + annotation ---
 st.subheader("2️⃣ Review phrases and generate annotated PDFs")
 
 for f in uploaded_files:
     st.markdown(f"### 📄 {f.name}")
 
-    data = st.session_state["terms_by_file"].get(f.name, {"terms": [], "rationale_tags": {}})
+    data = st.session_state["terms_by_file"].get(
+        f.name, {"terms": [], "rationale_tags": {}}
+    )
     terms = data.get("terms", [])
 
     edited_terms_text = st.text_area(
@@ -68,7 +68,6 @@ for f in uploaded_files:
             )
 
         output_name = f.name.replace(".pdf", "_highlighted.pdf")
-
         st.success(f"Annotated PDF created — {report['total_hits']} highlights found")
 
         st.download_button(
