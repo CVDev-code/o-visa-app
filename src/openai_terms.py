@@ -1,14 +1,14 @@
 import json
 import os
+from typing import Dict, List, Optional
+
 from openai import OpenAI
 
-from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
+from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, CRITERIA
 
 
 def _get_secret(name: str):
-    """
-    Works on Streamlit Cloud (st.secrets) and locally (.env / env vars).
-    """
+    # Works on Streamlit Cloud (st.secrets) and locally (.env / env vars)
     try:
         import streamlit as st
         if name in st.secrets:
@@ -18,15 +18,21 @@ def _get_secret(name: str):
     return os.getenv(name)
 
 
-def suggest_ovisa_terms(document_text: str, feedback: dict | None = None) -> dict:
+def suggest_ovisa_quotes(
+    document_text: str,
+    beneficiary_name: str,
+    beneficiary_variants: List[str],
+    selected_criteria_ids: List[str],
+    feedback: Optional[Dict] = None,
+) -> Dict:
     """
-    Calls OpenAI to extract O-1-relevant highlight phrases.
-    feedback (optional) structure:
+    Returns:
       {
-        "approved_examples": ["...","..."],
-        "rejected_examples": ["...","..."]
+        "by_criterion": {"1":[{"quote":"...","strength":"high"}], ...},
+        "notes": "..."
       }
-    Returns: {"terms": [...], "rationale_tags": {...}}
+    feedback optional:
+      {"approved_examples":[...], "rejected_examples":[...]}
     """
     api_key = _get_secret("OPENAI_API_KEY")
     if not api_key:
@@ -35,17 +41,26 @@ def suggest_ovisa_terms(document_text: str, feedback: dict | None = None) -> dic
     model = _get_secret("OPENAI_MODEL") or "gpt-4.1-mini"
     client = OpenAI(api_key=api_key)
 
+    # Build criteria block shown to the model (only selected)
+    selected_lines = []
+    for cid in selected_criteria_ids:
+        desc = CRITERIA.get(cid, "")
+        selected_lines.append(f"- ({cid}) {desc}")
+    selected_criteria_block = "\n".join(selected_lines) if selected_lines else "None"
+
     approved = (feedback or {}).get("approved_examples", [])
     rejected = (feedback or {}).get("rejected_examples", [])
 
-    # Always supply these placeholders to avoid KeyError if the template contains them.
     prompt = USER_PROMPT_TEMPLATE.format(
-        text=document_text,
+        beneficiary_name=beneficiary_name.strip(),
+        beneficiary_variants=", ".join([v.strip() for v in beneficiary_variants if v.strip()]) or "None",
+        selected_criteria_block=selected_criteria_block,
         approved_examples="\n".join(approved) if approved else "None",
         rejected_examples="\n".join(rejected) if rejected else "None",
+        text=document_text,
     )
 
-    response = client.responses.create(
+    resp = client.responses.create(
         model=model,
         input=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -54,18 +69,33 @@ def suggest_ovisa_terms(document_text: str, feedback: dict | None = None) -> dic
         response_format={"type": "json_object"},
     )
 
-    raw_output = response.output_text
-
+    raw = resp.output_text
     try:
-        data = json.loads(raw_output)
+        data = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"OpenAI returned invalid JSON:\n{raw_output}") from e
+        raise RuntimeError(f"OpenAI returned invalid JSON:\n{raw}") from e
 
-    # Normalise output
-    terms = data.get("terms", [])
-    data["terms"] = [t.strip() for t in terms if isinstance(t, str) and t.strip()]
+    by_criterion = data.get("by_criterion", {})
+    if not isinstance(by_criterion, dict):
+        by_criterion = {}
 
-    if "rationale_tags" not in data or not isinstance(data["rationale_tags"], dict):
-        data["rationale_tags"] = {}
+    # Normalize: ensure selected criteria exist and items have quote/strength
+    cleaned = {}
+    for cid in selected_criteria_ids:
+        items = by_criterion.get(cid, [])
+        if not isinstance(items, list):
+            items = []
+        out_items = []
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            q = it.get("quote")
+            s = it.get("strength", "medium")
+            if isinstance(q, str) and q.strip():
+                out_items.append({"quote": q.strip(), "strength": s if s in {"high", "medium", "low"} else "medium"})
+        cleaned[cid] = out_items
 
-    return data
+    return {
+        "by_criterion": cleaned,
+        "notes": data.get("notes", "") if isinstance(data.get("notes", ""), str) else "",
+    }
