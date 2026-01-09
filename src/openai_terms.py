@@ -60,16 +60,33 @@ def suggest_ovisa_quotes(
         text=document_text,
     )
 
-    resp = client.responses.create(
-        model=model,
-        input=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        response_format={"type": "json_object"},
-    )
+    # New SDKs accept response_format; older ones raise TypeError.
+    try:
+        resp = client.responses.create(
+            model=model,
+            input=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+        raw = resp.output_text
+    except TypeError:
+        resp = client.responses.create(
+            model=model,
+            input=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        raw = getattr(resp, "output_text", None)
+        if not raw:
+            # Fallback path for some SDK builds
+            try:
+                raw = resp.output[0].content[0].text
+            except Exception:
+                raw = str(resp)
 
-    raw = resp.output_text
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -92,7 +109,12 @@ def suggest_ovisa_quotes(
             q = it.get("quote")
             s = it.get("strength", "medium")
             if isinstance(q, str) and q.strip():
-                out_items.append({"quote": q.strip(), "strength": s if s in {"high", "medium", "low"} else "medium"})
+                out_items.append(
+                    {
+                        "quote": q.strip(),
+                        "strength": s if s in {"high", "medium", "low"} else "medium",
+                    }
+                )
         cleaned[cid] = out_items
 
     return {
