@@ -131,6 +131,13 @@ for f in uploaded_files:
         regen_btn = st.button("Regenerate with my feedback", key=f"regen_{f.name}")
     with regen_col2:
         st.caption("Tip: Reject weak quotes, then regenerate to tighten results for this PDF.")
+        regen_extra = st.text_area(
+            "Regeneration prompt (optional)",
+            value=st.session_state.get(f"regen_prompt_{f.name}", ""),
+            key=f"regen_prompt_{f.name}",
+            placeholder="E.g., focus on critical reviews and international reputation; avoid generic adjectives.",
+            height=80,
+        )
 
     if regen_btn:
         # Build compact feedback examples across selected criteria
@@ -143,6 +150,7 @@ for f in uploaded_files:
         feedback = {
             "approved_examples": approved_examples[:15],
             "rejected_examples": rejected_examples[:15],
+            "extra_instructions": (regen_extra or "").strip(),
         }
         with st.spinner("Regenerating with feedback…"):
             text = extract_text_from_pdf_bytes(f.getvalue())
@@ -167,7 +175,7 @@ for f in uploaded_files:
         crit_desc = CRITERIA.get(cid, "")
         items = by_criterion.get(cid, [])
 
-        with st.expander(f"{crit_title}: {crit_desc}", expanded=(cid in {"2","3","4"})):
+        with st.expander(f"{crit_title}: {crit_desc}", expanded=(cid in {"2", "3", "4"})):
             if not items:
                 st.write("No candidates found for this criterion in this document.")
                 continue
@@ -206,9 +214,11 @@ st.divider()
 # -------------------------
 st.subheader("3️⃣ Export highlighted PDFs by criterion")
 
+
 def build_highlighted_pdf_bytes(pdf_bytes: bytes, quotes: list[str]):
     # reuses your red-box highlighter; report contains total hits
     return highlight_terms_in_pdf_bytes(pdf_bytes, quotes)
+
 
 # Single-file, per-criterion export buttons + "Export all as ZIP"
 zip_btn = st.button("Export ALL selected criteria as ZIP (all PDFs)", type="primary")
