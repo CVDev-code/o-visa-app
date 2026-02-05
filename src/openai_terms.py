@@ -57,6 +57,7 @@ def suggest_ovisa_quotes(
         selected_criteria_block=selected_criteria_block,
         approved_examples="\n".join(approved) if approved else "None",
         rejected_examples="\n".join(rejected) if rejected else "None",
+        extra_instructions=(feedback or {}).get("extra_instructions", "") or "None",
         text=document_text,
     )
 
